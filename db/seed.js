@@ -8,6 +8,9 @@ const {
   getAllPosts,
   getPostsByUser,
   getUserById,
+  createTags,
+  createPostTag,
+  addTagsToPost,
 } = require("./index");
 
 async function dropTables() {
@@ -15,12 +18,11 @@ async function dropTables() {
     console.log("Starting to drop tables...");
 
     await client.query(`
+      DROP TABLE IF EXISTS post_tags;
+      DROP TABLE IF EXISTS tags;
       DROP TABLE IF EXISTS posts;
+      DROP TABLE IF EXISTS users;
     `);
-
-    await client.query(`
-        DROP TABLE IF EXISTS users;
-        `);
 
     console.log("Tables dropped!");
   } catch (err) {
@@ -51,7 +53,23 @@ async function createTables() {
             title varchar(255) NOT NULL,
             content TEXT NOT NULL,
             active BOOLEAN DEFAULT true
-          )
+          );
+    `);
+
+    await client.query(`
+          CREATE TABLE tags (
+            id SERIAL PRIMARY KEY,
+            name varchar(255) UNIQUE NOT NULL
+          );
+    `);
+
+    await client.query(`
+          CREATE TABLE post_tags(
+            "postId" INTEGER REFERENCES posts(id),
+            "tagId" INTEGER REFERENCES tags(id),
+            UNIQUE("postId", "tagId")
+          );
+              
     `);
 
     console.log("Tables created!");
@@ -120,6 +138,30 @@ async function createInitialPosts() {
   }
 }
 
+async function createInitialTags() {
+  try {
+    console.log("Creating tags...");
+
+    const [happy, sad, inspo, catman] = await createTags([
+      "#happy",
+      "#worst-day-ever",
+      "#youcandoanything",
+      "#catmandoeverything",
+    ]);
+
+    const [post1, post2, post3] = await getAllPosts();
+
+    await addTagsToPost(post1.id, [happy, inspo]);
+    await addTagsToPost(post2.id, [sad, inspo]);
+    await addTagsToPost(post3.id, [happy, catman, inspo]);
+
+    console.log("Tags created!");
+  } catch (err) {
+    console.log("Error creating tags--");
+    throw err;
+  }
+}
+
 async function rebuildDB() {
   try {
     client.connect();
@@ -127,6 +169,7 @@ async function rebuildDB() {
     await createTables();
     await createInitialUsers();
     await createInitialPosts();
+    await createInitialTags();
   } catch (err) {
     throw err;
   }
