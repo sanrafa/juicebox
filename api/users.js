@@ -3,7 +3,14 @@ const jwt = require("jsonwebtoken");
 const express = require("express");
 const usersRouter = express.Router();
 
-const { getAllUsers, getUserByUsername, createUser } = require("../db");
+const {
+  getAllUsers,
+  getUserByUsername,
+  createUser,
+  getUserById,
+  updateUser,
+} = require("../db");
+const { requireUser, requireActiveUser } = require("./utils");
 
 usersRouter.use((req, res, next) => {
   console.log("A request is being made to /users");
@@ -74,6 +81,79 @@ usersRouter.post("/register", async (req, res, next) => {
       message: "Thanks for signing up",
       token,
     });
+  } catch ({ name, message }) {
+    next({ name, message });
+  }
+});
+
+usersRouter.delete(
+  "/:userId",
+  requireUser,
+  requireActiveUser,
+  async (req, res, next) => {
+    try {
+      const user = await getUserById(req.params.userId); //USE user[0] to access user obj
+
+      if (user && user[0].id === req.user[0].id && user[0].active) {
+        const updatedUser = await updateUser(user[0].id, { active: false });
+
+        res.send({
+          message: "Your account is deactivated.",
+          user: updatedUser,
+        });
+      } else if (!user[0].active) {
+        next({
+          name: "InactiveUserError",
+          message: "This account is already deactivated.",
+        });
+      } else {
+        next(
+          user
+            ? {
+                name: "UnauthorizedUserError",
+                message: "You cannot deactivate an account that is not yours.",
+              }
+            : {
+                name: "UserNotFoundError",
+                message: "Could not find user by that id.",
+              }
+        );
+      }
+    } catch ({ name, message }) {
+      next({ name, message });
+    }
+  }
+);
+
+usersRouter.patch("/:userId", requireUser, async (req, res, next) => {
+  try {
+    const user = await getUserById(req.params.userId); //USE user[0] to access user obj
+
+    if (user && user[0].id === req.user[0].id && !user[0].active) {
+      const updatedUser = await updateUser(user[0].id, { active: true });
+
+      res.send({
+        message: "Your account is reactivated.",
+        user: updatedUser,
+      });
+    } else if (user[0].active) {
+      next({
+        name: "ActiveUserError",
+        message: "This account is already activated.",
+      });
+    } else {
+      next(
+        user
+          ? {
+              name: "UnauthorizedUserError",
+              message: "You cannot reactivate an account that is not yours.",
+            }
+          : {
+              name: "UserNotFoundError",
+              message: "Could not find user by that id.",
+            }
+      );
+    }
   } catch ({ name, message }) {
     next({ name, message });
   }
